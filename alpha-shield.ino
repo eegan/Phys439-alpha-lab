@@ -21,10 +21,11 @@ SCPI_Parser my_instrument;
 // not sure if we can get more than 8 using the simple Arduino library
 // can get more if we mess with registers
 // can get 12 if we use the ADC on the Due
-const int res_bits_valve = 8;
-const int valve_maxcount = 255;
-const int res_bits_bias = 8;
-const int bias_maxcount = 255;
+
+const int n_channels = 2;
+
+const int analogwrite_res_bits = 12;
+const int analogwrite_maxcount = (1 << analogwrite_res_bits) - 1;
 
 const float vcc = 5.0;              // Arduino supply
 
@@ -35,6 +36,7 @@ const float bias_maxvolt = 200.0;   // maximum range, lower limit may be set
 const float bias_transfer = bias_maxvolt / vcc;
 
 // Hardware configuration: {first channel, second channel}
+//const int biasPins[] = {DAC0, DAC1};
 const int biasPins[] = {5, 6};
 const int valvePins[] = {9, 10};
 const int relayPins[] = {3, 2};
@@ -47,7 +49,8 @@ int relay_settings[] = {0, 0};
 // Where to send debug output
 // Note, this doesn't work for SCPI parser code, needs a bit of work to pass in the reference
 // Or, just put a single place there, to change it
-HardwareSerial Dbg = Serial2;
+//HardwareSerial Dbg = Serial2;
+#define Dbg Serial2
 
 void setup()
 {
@@ -86,25 +89,20 @@ void setupSCPI()
 // Configure pins
 void ConfigurePins() 
 {
-  // relays
-  pinMode(relayPins[0], OUTPUT);
-  digitalWrite(relayPins[0], 0);
-  pinMode(relayPins[1], OUTPUT);
-  digitalWrite(relayPins[1], 0);
-
-  // valves
-  pinMode(valvePins[0], OUTPUT);
-  analogWrite(valvePins[0], 0);
+  analogWriteResolution(analogwrite_res_bits);
+  for (int i=0; i<n_channels; i++) {
+    // relays
+    pinMode(relayPins[i], OUTPUT);
+    digitalWrite(relayPins[i], 0);
   
-  pinMode(valvePins[1], OUTPUT);
-  analogWrite(valvePins[1], 0);
-
-  // voltage control
-  pinMode(biasPins[0], OUTPUT);
-  analogWrite(biasPins[0], 0);
-  
-  pinMode(biasPins[1], OUTPUT);
-  analogWrite(biasPins[1], 0);  
+    // valves
+    pinMode(valvePins[i], OUTPUT);
+    analogWrite(valvePins[i], 0);
+    
+    // bias voltage
+    pinMode(biasPins[i], OUTPUT);
+    analogWrite(biasPins[i], 0);
+  }
 }
 
 
@@ -120,12 +118,12 @@ void Debug(SCPI_C commands, SCPI_P parameters, Stream& interface)
 
 void SetBias(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
-  SetAnalog(commands, parameters, interface, biasPins, bias_settings, bias_maxcount, bias_maxvolt);
+  SetAnalog(commands, parameters, interface, biasPins, bias_settings, analogwrite_maxcount, bias_maxvolt);
 }
 
 void SetValve(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
-  SetAnalog(commands, parameters, interface, valvePins, valve_settings, valve_maxcount, valve_maxpercent);
+  SetAnalog(commands, parameters, interface, valvePins, valve_settings, analogwrite_maxcount, valve_maxpercent);
 }
 
 void SetRelay(SCPI_C commands, SCPI_P parameters, Stream& interface) 
@@ -141,9 +139,10 @@ void SetAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface, const int 
     if (parameters.Size() > 0) {
       // TODO round by adding 0.5?
       setting = constrain(String(parameters[0]).toFloat(), 0.0, maxsetting);
+      analogWrite(pins[channel-1], setting/maxsetting*maxcount);
+      settings[channel-1] = setting;
+      //Serial.print("Pin: "); Serial.print(biasPins[channel-1]); Serial.print(", setting: "); Serial.print(setting/maxsetting*maxcount); Serial.println("\n");
     }
-    analogWrite(biasPins[channel-1], setting/maxsetting*maxcount);
-    settings[channel-1] = setting;    
   }
 }
 
@@ -156,9 +155,8 @@ void SetDigital(SCPI_C commands, SCPI_P parameters, Stream& interface, const int
   if (channel >= 1 && channel <= 2) {
     if (parameters.Size() > 0) {
       setting = constrain(String(parameters[0]).toInt(), 0, 1);
-    }
-    digitalWrite(biasPins[channel-1], setting);
-    settings[channel-1] = setting;    
+      digitalWrite(biasPins[channel-1], setting);
+      settings[channel-1] = setting;      }
   }
 }
 
