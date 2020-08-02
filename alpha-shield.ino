@@ -27,16 +27,19 @@ const int n_channels = 2;
 const int analogwrite_res_bits = 12;
 const int analogwrite_maxcount = (1 << analogwrite_res_bits) - 1;
 
-const float vcc = 5.0;              // Arduino supply
+const float vcc = 3.3;              // Arduino supply (PWM or ADC full scale)
 
-const float valve_maxpercent = 100.0;   // maximum range
-const float valve_transfer = valve_maxpercent / vcc; // transfer function
+const float valve_maxsetting = 100.0;   // maximum range (percent)
+const float valve_maxvoltage = 20.0;    // corresponding control voltage
+const float valve_gain = 6.783;         // amplifier gain (nominal, by component values)
+const float valve_factor = analogwrite_maxcount / vcc * valve_maxvoltage / valve_maxsetting / valve_gain;
 
-const float bias_maxvolt = 200.0;   // maximum range, lower limit may be set
-const float bias_transfer = bias_maxvolt / vcc;
+const float bias_maxsetting = 200.0;   // maximum range, lower limit may be set
+const float bias_maxvoltage = 2.5;     // corresponding control voltage
+const float bias_gain = 0.69299;       // amplifier gain (nominal, by component values)
+const float bias_factor = analogwrite_maxcount / vcc * bias_maxvoltage / bias_maxsetting / bias_gain;
 
 // Hardware configuration: {first channel, second channel}
-//const int biasPins[] = {DAC0, DAC1};
 const int biasPins[] = {5, 6};
 const int valvePins[] = {9, 10};
 const int relayPins[] = {3, 2};
@@ -118,12 +121,12 @@ void Debug(SCPI_C commands, SCPI_P parameters, Stream& interface)
 
 void SetBias(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
-  SetAnalog(commands, parameters, interface, biasPins, bias_settings, analogwrite_maxcount, bias_maxvolt);
+  SetAnalog(commands, parameters, interface, biasPins, bias_settings, bias_maxsetting, bias_factor);
 }
 
 void SetValve(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
-  SetAnalog(commands, parameters, interface, valvePins, valve_settings, analogwrite_maxcount, valve_maxpercent);
+  SetAnalog(commands, parameters, interface, valvePins, valve_settings, valve_maxsetting, valve_factor);
 }
 
 void SetRelay(SCPI_C commands, SCPI_P parameters, Stream& interface) 
@@ -131,7 +134,7 @@ void SetRelay(SCPI_C commands, SCPI_P parameters, Stream& interface)
   SetDigital(commands, parameters, interface, relayPins, relay_settings);
 }
 
-void SetAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], float settings[], float maxcount, float maxsetting)
+void SetAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], float settings[], float maxsetting, float factor)
 {
   float setting;
   int channel = getSuffix(commands);
@@ -139,9 +142,15 @@ void SetAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface, const int 
     if (parameters.Size() > 0) {
       // TODO round by adding 0.5?
       setting = constrain(String(parameters[0]).toFloat(), 0.0, maxsetting);
-      analogWrite(pins[channel-1], setting/maxsetting*maxcount);
+      analogWrite(pins[channel-1], setting*factor);
       settings[channel-1] = setting;
-      //Serial.print("Pin: "); Serial.print(biasPins[channel-1]); Serial.print(", setting: "); Serial.print(setting/maxsetting*maxcount); Serial.println("\n");
+      #if 0
+      Serial.print("Pin: "); Serial.print(pins[channel-1]); 
+      Serial.print(", setting: "); Serial.print(setting);
+      Serial.print(", factor: "); Serial.print(factor);
+      Serial.print(", count: "); Serial.print(setting*factor); 
+      Serial.println("\n");
+      #endif
     }
   }
 }
