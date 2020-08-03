@@ -42,7 +42,7 @@ const float bias_factor = analogwrite_maxcount / vcc * bias_maxvoltage / bias_ma
 // Hardware configuration: {first channel, second channel}
 const int biasPins[] = {5, 6};
 const int valvePins[] = {9, 10};
-const int relayPins[] = {3, 2};
+const int relayPins[] = {20, 21};     // RELAY1, RELAY2 are currently on the second channel
 
 // state variables (settings)
 float bias_settings[] = {0.0, 0.0};
@@ -96,7 +96,7 @@ void ConfigurePins()
   for (int i=0; i<n_channels; i++) {
     // relays
     pinMode(relayPins[i], OUTPUT);
-    digitalWrite(relayPins[i], 0);
+    digitalWrite(relayPins[i], 1);
   
     // valves
     pinMode(valvePins[i], OUTPUT);
@@ -142,13 +142,14 @@ void SetAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface, const int 
     if (parameters.Size() > 0) {
       // TODO round by adding 0.5?
       setting = constrain(String(parameters[0]).toFloat(), 0.0, maxsetting);
-      analogWrite(pins[channel-1], setting*factor);
+      int count = constrain(setting*factor, 0, analogwrite_maxcount);
+      analogWrite(pins[channel-1], count);
       settings[channel-1] = setting;
-      #if 0
+      #if 1
       Serial.print("Pin: "); Serial.print(pins[channel-1]); 
       Serial.print(", setting: "); Serial.print(setting);
       Serial.print(", factor: "); Serial.print(factor);
-      Serial.print(", count: "); Serial.print(setting*factor); 
+      Serial.print(", count: "); Serial.print(count); 
       Serial.println("\n");
       #endif
     }
@@ -164,7 +165,7 @@ void SetDigital(SCPI_C commands, SCPI_P parameters, Stream& interface, const int
   if (channel >= 1 && channel <= 2) {
     if (parameters.Size() > 0) {
       setting = constrain(String(parameters[0]).toInt(), 0, 1);
-      digitalWrite(biasPins[channel-1], setting);
+      digitalWrite(relayPins[channel-1], !setting);    // active low
       settings[channel-1] = setting;      }
   }
 }
