@@ -33,11 +33,13 @@ const float valve_maxsetting = 100.0;   // maximum range (percent)
 const float valve_maxvoltage = 20.0;    // corresponding control voltage
 const float valve_gain = 6.783;         // amplifier gain (nominal, by component values)
 const float valve_factor = analogwrite_maxcount / vcc * valve_maxvoltage / valve_maxsetting / valve_gain;
+const float valve_offset = 0.0;
 
 const float bias_maxsetting = 200.0;   // maximum range, lower limit may be set
 const float bias_maxvoltage = 2.5;     // corresponding control voltage
 const float bias_gain = 0.69299;       // amplifier gain (nominal, by component values)
 const float bias_factor = analogwrite_maxcount / vcc * bias_maxvoltage / bias_maxsetting / bias_gain;
+const float bias_offset = 0.0;
 
 // Hardware configuration: {first channel, second channel}
 const int biasPins[] = {5, 6};
@@ -55,19 +57,23 @@ int relay_settings[] = {0, 0};
 //HardwareSerial Dbg = Serial2;
 #define Dbg Serial2
 
+#define Port SerialUSB  // native port (not yet working)
+//#define Port Serial       // programming port
+
 void setup()
 {
   setupSCPI();
-  Serial.begin(9600);
+  Port.begin(9600);
+  while (!Port) ;
   if (Dbg != Serial)
     Dbg.begin(9600);
-
+  
   ConfigurePins();
 }
 
 void loop()
 {
-  my_instrument.ProcessInput(Serial, (char *)"\n");
+  my_instrument.ProcessInput(Port, (char *)"\n");
 }
 
 void setupSCPI()
@@ -121,12 +127,12 @@ void Debug(SCPI_C commands, SCPI_P parameters, Stream& interface)
 
 void SetBias(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
-  SetAnalog(commands, parameters, interface, biasPins, bias_settings, bias_maxsetting, bias_factor);
+  SetAnalog(commands, parameters, interface, biasPins, bias_settings, bias_maxsetting, bias_factor, bias_offset);
 }
 
 void SetValve(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
-  SetAnalog(commands, parameters, interface, valvePins, valve_settings, valve_maxsetting, valve_factor);
+  SetAnalog(commands, parameters, interface, valvePins, valve_settings, valve_maxsetting, valve_factor, valve_offset);
 }
 
 void SetRelay(SCPI_C commands, SCPI_P parameters, Stream& interface) 
@@ -134,7 +140,7 @@ void SetRelay(SCPI_C commands, SCPI_P parameters, Stream& interface)
   SetDigital(commands, parameters, interface, relayPins, relay_settings);
 }
 
-void SetAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], float settings[], float maxsetting, float factor)
+void SetAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], float settings[], float maxsetting, float factor, float offset)
 {
   float setting;
   int channel = getSuffix(commands);
@@ -142,15 +148,15 @@ void SetAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface, const int 
     if (parameters.Size() > 0) {
       // TODO round by adding 0.5?
       setting = constrain(String(parameters[0]).toFloat(), 0.0, maxsetting);
-      int count = constrain(setting*factor, 0, analogwrite_maxcount);
+      int count = constrain(setting*factor + offset, 0, analogwrite_maxcount);
       analogWrite(pins[channel-1], count);
       settings[channel-1] = setting;
       #if 1
-      Serial.print("Pin: "); Serial.print(pins[channel-1]); 
-      Serial.print(", setting: "); Serial.print(setting);
-      Serial.print(", factor: "); Serial.print(factor);
-      Serial.print(", count: "); Serial.print(count); 
-      Serial.println("\n");
+      Port.print("Pin: "); Port.print(pins[channel-1]); 
+      Port.print(", setting: "); Port.print(setting);
+      Port.print(", factor: "); Port.print(factor);
+      Port.print(", count: "); Port.print(count); 
+      Port.println("\n");
       #endif
     }
   }
