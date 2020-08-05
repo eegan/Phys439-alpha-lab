@@ -57,8 +57,8 @@ int relay_settings[] = {0, 0};
 //HardwareSerial Dbg = Serial2;
 #define Dbg Serial2
 
-#define Port SerialUSB  // native port (not yet working)
-//#define Port Serial       // programming port
+//#define Port SerialUSB  // native port (not yet working)
+#define Port Serial       // programming port
 
 void setup()
 {
@@ -151,7 +151,7 @@ void SetAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface, const int 
       int count = constrain(setting*factor + offset, 0, analogwrite_maxcount);
       analogWrite(pins[channel-1], count);
       settings[channel-1] = setting;
-      #if 1
+      #if 0
       Port.print("Pin: "); Port.print(pins[channel-1]); 
       Port.print(", setting: "); Port.print(setting);
       Port.print(", factor: "); Port.print(factor);
