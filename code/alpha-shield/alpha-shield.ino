@@ -33,7 +33,7 @@ const float valve_maxsetting = 100.0;   // maximum range (percent)
 const float valve_maxvoltage = 20.0;    // corresponding control voltage
 const float valve_gain = 6.783;         // amplifier gain (nominal, by component values)
 const float valve_factor = analogwrite_maxcount / vcc * valve_maxvoltage / valve_maxsetting / valve_gain;
-const float valve_offset = 0.0;
+const float valve_offset = 1.2;         // Vbe drop on emitter follower, plus whatever else
 
 const float bias_maxsetting = 200.0;   // maximum range, lower limit may be set
 const float bias_maxvoltage = 2.5;     // corresponding control voltage
@@ -45,11 +45,13 @@ const float bias_offset = 0.0;
 const int biasPins[] = {5, 6};
 const int valvePins[] = {9, 10};
 const int relayPins[] = {20, 21};     // RELAY1, RELAY2 are currently on the second channel
+const int biasControl = 15;
 
 // state variables (settings)
 float bias_settings[] = {0.0, 0.0};
 float valve_settings[] = {0.0, 0.0};
 int relay_settings[] = {0, 0};
+bool biasState = false;
 
 // Where to send debug output
 // Note, this doesn't work for SCPI parser code, needs a bit of work to pass in the reference
@@ -88,6 +90,9 @@ void setupSCPI()
   my_instrument.RegisterCommand(F("BIAS"), &SetBias);
   my_instrument.RegisterCommand(F("BIAS?"), &GetBias);
 
+  my_instrument.RegisterCommand(F("BIAS:ON"), &biasOn);
+  my_instrument.RegisterCommand(F("BIAS:OFF"), &biasOff);
+
   my_instrument.RegisterCommand(F("VALVE"), &SetValve);
   my_instrument.RegisterCommand(F("VALVE?"), &GetValve);
 
@@ -102,7 +107,7 @@ void ConfigurePins()
   for (int i=0; i<n_channels; i++) {
     // relays
     pinMode(relayPins[i], OUTPUT);
-    digitalWrite(relayPins[i], 1);
+    digitalWrite(relayPins[i], 1);            // active low
   
     // valves
     pinMode(valvePins[i], OUTPUT);
@@ -112,6 +117,9 @@ void ConfigurePins()
     pinMode(biasPins[i], OUTPUT);
     analogWrite(biasPins[i], 0);
   }
+
+  pinMode(biasControl, OUTPUT);
+  digitalWrite(biasControl, !biasState);      // active low
 }
 
 
@@ -128,6 +136,18 @@ void Debug(SCPI_C commands, SCPI_P parameters, Stream& interface)
 void SetBias(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
   SetAnalog(commands, parameters, interface, biasPins, bias_settings, bias_maxsetting, bias_factor, bias_offset);
+}
+
+void biasOn(SCPI_C commands, SCPI_P parameters, Stream& interface) 
+{
+  biasState = true;
+  digitalWrite(biasControl, !biasState);
+}
+
+void biasOff(SCPI_C commands, SCPI_P parameters, Stream& interface) 
+{
+  biasState = false;
+  digitalWrite(biasControl, !biasState);
 }
 
 void SetValve(SCPI_C commands, SCPI_P parameters, Stream& interface) 
@@ -148,7 +168,7 @@ void SetAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface, const int 
     if (parameters.Size() > 0) {
       // TODO round by adding 0.5?
       setting = constrain(String(parameters[0]).toFloat(), 0.0, maxsetting);
-      int count = constrain(setting*factor + offset, 0, analogwrite_maxcount);
+      int count = constrain((setting+offset)*factor, 0, analogwrite_maxcount);
       analogWrite(pins[channel-1], count);
       settings[channel-1] = setting;
       #if 0
