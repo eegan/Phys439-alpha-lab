@@ -22,24 +22,28 @@ const int n_channels = 2;
 const int analogwrite_res_bits = 12;
 const int analogwrite_maxcount = (1 << analogwrite_res_bits) - 1;
 
-const float vcc = 3.3;              // Arduino supply (PWM or ADC full scale)
+const float vcc = 3.3;                  // Arduino supply (PWM or ADC full scale)
 
 const float valve_maxsetting = 100.0;   // maximum range (percent)
 const float valve_maxvoltage = 20.0;    // corresponding control voltage
 const float valve_gain = 6.783;         // amplifier gain (nominal, by component values)
+
+// (pwm count) = (setting+offset)*factor
 const float valve_factor = analogwrite_maxcount / vcc * valve_maxvoltage / valve_maxsetting / valve_gain;
 const float valve_offset = 1.2;         // Vbe drop on emitter follower, plus whatever else
 
 const float bias_maxsetting = 200.0;   // maximum range, lower limit may be set
 const float bias_maxvoltage = 2.5;     // corresponding control voltage
 const float bias_gain = 0.69299;       // amplifier gain (nominal, by component values)
+
+// (pwm count) = (setting+offset)*factor
 const float bias_factor = analogwrite_maxcount / vcc * bias_maxvoltage / bias_maxsetting / bias_gain;
 const float bias_offset = 0.0;
 
 // Hardware configuration: {first channel, second channel}
 const int biasPins[] = {5, 6};
 const int valvePins[] = {9, 10};
-const int relayPins[] = {20, 21};     // RELAY1, RELAY2 are currently on the second channel
+const int relayPins[] = {20, 21};     // RELAY1, RELAY2 are currently on the second (physical) channel, because of convenience of connectors
 const int biasControl = 15;
 
 // state variables (settings)

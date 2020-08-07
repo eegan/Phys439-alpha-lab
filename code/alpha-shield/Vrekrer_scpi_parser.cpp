@@ -1,6 +1,8 @@
 #include "Vrekrer_scpi_parser.h"
 #include "Arduino.h"
 
+//HardwareSerial &Dbg = Serial2;
+
 // SCPI_String_Array member functions
 
 SCPI_String_Array::SCPI_String_Array() {}
