@@ -5,15 +5,15 @@ SCPI_Parser my_instrument;
 
 /*
  * TODO:
- * Test current functionality (relay on/off, PWM settings)
  * *RST, any other general SCPI commands?
- * EEPROM calibration trim, trim setting commands
- * bias voltage readback
- * enhanced resolution on bias voltage (>8 bits)
+ * calibration trim (in flash), trim setting commands - either factor + offset, or 2 point calibration
+ * bias voltage readback, plus two 0-10V channels
+ * include soft limits (flash parameters)
+ * figure out continuous polling
  * global off? it all comes back when it's turned on?
  * Debug port, do it nicer, include .cpp file?
  * Maybe get rid of String class usage? Or check for heap fragmentation (it's probably ok)
- * 
+ * Debug crash / disconnect
  * 
  */
 
@@ -56,8 +56,7 @@ bool biasState = false;
 // Where to send debug output
 // Note, this doesn't work for SCPI parser code, needs a bit of work to pass in the reference
 // Or, just put a single place there, to change it
-//HardwareSerial Dbg = Serial2;
-#define Dbg Serial2
+HardwareSerial &Dbg = Serial2;
 
 //#define Port SerialUSB  // native port (not yet working)
 #define Port Serial       // programming port
