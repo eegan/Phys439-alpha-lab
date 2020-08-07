@@ -1,8 +1,6 @@
 #include "Arduino.h"
 #include "Vrekrer_scpi_parser.h"
 
-SCPI_Parser my_instrument;
-
 /*
  * TODO:
  * *RST, any other general SCPI commands?
@@ -17,10 +15,7 @@ SCPI_Parser my_instrument;
  * 
  */
 
-// analogwrite resolution
-// not sure if we can get more than 8 using the simple Arduino library
-// can get more if we mess with registers
-// can get 12 if we use the ADC on the Due
+SCPI_Parser my_instrument;
 
 const int n_channels = 2;
 
@@ -59,14 +54,15 @@ bool biasState = false;
 HardwareSerial &Dbg = Serial2;
 
 //#define Port SerialUSB  // native port (not yet working)
-#define Port Serial       // programming port
+//#define Port Serial       // programming port
+HardwareSerial &Port = Serial;
 
 void setup()
 {
   setupSCPI();
   Port.begin(9600);
   while (!Port) ;
-  if (Dbg != Serial)
+  if (Dbg != Port)
     Dbg.begin(9600);
   
   ConfigurePins();
