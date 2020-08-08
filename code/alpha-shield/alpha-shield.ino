@@ -23,6 +23,9 @@ const int n_channels = 2;
 const int analogwrite_res_bits = 12;
 const int analogwrite_maxcount = (1 << analogwrite_res_bits) - 1;
 
+const int analogread_res_bits = 12;
+const int analogread_maxcount = (1 << analogread_res_bits) - 1;
+
 const float vcc = 3.3;                  // Arduino supply (PWM or ADC full scale)
 
 const float valve_maxsetting = 100.0;   // maximum range (percent)
@@ -46,6 +49,7 @@ const int biasPins[] = {5, 6};
 const int valvePins[] = {9, 10};
 const int relayPins[] = {20, 21};     // RELAY1, RELAY2 are currently on the second (physical) channel, because of convenience of connectors
 const int biasControl = 15;
+const int analogPins[] = {A0, A1, A2};
 
 // state variables (settings)
 float bias_settings[] = {0.0, 0.0};
@@ -71,7 +75,7 @@ void setup()
 //  if (Dbg != Port)
 //    Dbg.begin(9600);
   
-  ConfigurePins();
+  ConfigureHardware();
 }
 
 void loop()
@@ -97,12 +101,14 @@ void setupSCPI()
   my_instrument.RegisterCommand(F("VALVE"), &SetValve);
   my_instrument.RegisterCommand(F("VALVE?"), &GetValve);
 
+  my_instrument.RegisterCommand(F("READ?"), &ReadAnalog);
+
   my_instrument.RegisterCommand(F("*DEBUG?"), &Debug);
-  
+ 
 }
 
 // Configure pins
-void ConfigurePins() 
+void ConfigureHardware() 
 {
   analogWriteResolution(analogwrite_res_bits);
   for (int i=0; i<n_channels; i++) {
@@ -121,6 +127,10 @@ void ConfigurePins()
 
   pinMode(biasControl, OUTPUT);
   digitalWrite(biasControl, !biasState);      // active low
+
+  analogReadResolution(analogread_res_bits);
+
+  // apparently no configuration is needed to use the analog pins as inputs?
 }
 
 
@@ -221,6 +231,19 @@ void GetRelay(SCPI_C commands, SCPI_P parameters, Stream& interface) {
   int channel = getSuffix(commands);
   if (channel >= 1 && channel <= 2) {
     interface.println(relay_settings[channel-1]);
+  }  
+}
+
+void ReadAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface)
+{
+  int channel = getSuffix(commands);
+  if (channel >= 1 && channel <= 3) {
+    int pin = analogPins[channel-1];
+    analogRead(pin);    // throw away first reading
+    delay(50);          // settling time
+    float sum = 0; int n=8; int i;
+    for (i=0; i<n; i++) sum += analogRead(pin);
+    interface.println(sum/n);
   }  
 }
 
