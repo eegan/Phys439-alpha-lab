@@ -11,8 +11,9 @@
  * global off? it all comes back when it's turned on?
  * Debug port, do it nicer, include .cpp file?
  * Maybe get rid of String class usage? Or check for heap fragmentation (it's probably ok)
- * Debug crash / disconnect
  * 
+ * DONE:
+ * Debug crash / disconnect
  */
 
 SCPI_Parser my_instrument;
@@ -55,7 +56,8 @@ bool biasState = false;
 // Where to send debug output
 // Note, this doesn't work for SCPI parser code, needs a bit of work to pass in the reference
 // Or, just put a single place there, to change it
-HardwareSerial &Dbg = Serial2;
+// Putting Serial2 as if it were /dev/null caused the program to hang after some debug characters were sent out on it... maybe it's flowcontrolled off?
+//HardwareSerial &Dbg = Serial2;
 
 //#define Port SerialUSB  // native port (not yet working)
 //#define Port Serial       // programming port
@@ -66,8 +68,8 @@ void setup()
   setupSCPI();
   Port.begin(9600);
   while (!Port) ;
-  if (Dbg != Port)
-    Dbg.begin(9600);
+//  if (Dbg != Port)
+//    Dbg.begin(9600);
   
   ConfigurePins();
 }
@@ -198,7 +200,7 @@ void SetDigital(SCPI_C commands, SCPI_P parameters, Stream& interface, const int
 
 void GetBias(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
-  Dbg.println("In GetBias");
+  //Dbg.println("In GetBias");
   int channel = getSuffix(commands);
   if (channel >= 1 && channel <= 2) {
     interface.println(bias_settings[channel-1]);
@@ -207,7 +209,7 @@ void GetBias(SCPI_C commands, SCPI_P parameters, Stream& interface)
 
 void GetValve(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
-  Dbg.println("In GetValve"); //EE
+  //Dbg.println("In GetValve"); //EE
   int channel = getSuffix(commands);
   if (channel >= 1 && channel <= 2) {
     interface.println(valve_settings[channel-1]);
@@ -215,7 +217,7 @@ void GetValve(SCPI_C commands, SCPI_P parameters, Stream& interface)
 }
 
 void GetRelay(SCPI_C commands, SCPI_P parameters, Stream& interface) {
-  Dbg.println("In GetRelay"); //EE
+  //Dbg.println("In GetRelay"); //EE
   int channel = getSuffix(commands);
   if (channel >= 1 && channel <= 2) {
     interface.println(relay_settings[channel-1]);
@@ -228,6 +230,6 @@ int getSuffix(SCPI_C commands)
   String header = String(commands.Last());
   int suffix = -1;
   sscanf(header.c_str(),"%*[a-zA-Z]%u", &suffix);
-  Dbg.print("Suffix: "); Dbg.println(suffix);
+  //Dbg.print("Suffix: "); Dbg.println(suffix);
   return suffix;
 }
