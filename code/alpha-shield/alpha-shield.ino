@@ -1,5 +1,6 @@
 #include "Arduino.h"
 #include "Vrekrer_scpi_parser.h"
+#include <math.h>
 
 /*
  * TODO:
@@ -102,6 +103,7 @@ void setupSCPI()
   my_instrument.RegisterCommand(F("VALVE?"), &GetValve);
 
   my_instrument.RegisterCommand(F("READ?"), &ReadAnalog);
+  my_instrument.RegisterCommand(F("PRESSURE?"), &ReadAnalogPressure);
 
   my_instrument.RegisterCommand(F("*DEBUG?"), &Debug);
  
@@ -193,7 +195,6 @@ void SetAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface, const int 
   }
 }
 
-
 // TODO: support ON / OFF ?
 void SetDigital(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], int settings[])
 {
@@ -206,7 +207,6 @@ void SetDigital(SCPI_C commands, SCPI_P parameters, Stream& interface, const int
       settings[channel-1] = setting;      }
   }
 }
-
 
 void GetBias(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
@@ -241,9 +241,45 @@ void ReadAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface)
     int pin = analogPins[channel-1];
     analogRead(pin);    // throw away first reading
     delay(50);          // settling time
-    float sum = 0; int n=8; int i;
+    
+    // Take average of 8 readings from pin
+    // Analog pins already set to 12 bit resolution
+    float sum = 0; 
+    int n=8; 
+    int i;
     for (i=0; i<n; i++) sum += analogRead(pin);
-    interface.println(sum/n);
+    sum = sum/n;
+    
+    // convert ADC reading to voltage
+    float voltage = sum * (vcc / 4095.0); // something is wrong here, need another conversion factor
+    interface.println(voltage);
+  }  
+}
+
+// Same as ReadAnalog, except it will perform a voltage to pressure conversion
+void ReadAnalogPressure(SCPI_C commands, SCPI_P parameters, Stream& interface)
+{
+  int channel = getSuffix(commands);
+  
+  if (channel >= 1 && channel <= 3) {
+    int pin = analogPins[channel-1];
+    analogRead(pin);    // throw away first reading
+    delay(50);          // settling time
+    
+    // Take average of 8 readings from pin
+    // Analog pins already set to 12 bit resolution
+    float sum = 0; 
+    int n=8; 
+    int i;
+    for (i=0; i<n; i++) sum += analogRead(pin);
+    sum = sum/n;
+    
+    // Convert ADC reading to voltage
+    // Get the voltage in V
+    float voltage = sum * (vcc / 4095.0); // double check: something is wrong here, need another conversion factor 
+    String unit = "Pa";
+    float pressure = voltageConvert(unit, voltage);
+    interface.println(pressure + ' ' + unit);
   }  
 }
 
@@ -255,4 +291,36 @@ int getSuffix(SCPI_C commands)
   sscanf(header.c_str(),"%*[a-zA-Z]%u", &suffix);
   //Dbg.print("Suffix: "); Dbg.println(suffix);
   return suffix;
+}
+
+// Converting the measured voltage reading from ADC to a pressure value
+// Takes ADC output in Volts and the unit of pressure as input; can choose from mbar, mubar, Torr, mTorr, Pa, kPa
+float voltageConvert(String unit, float volt)
+{ 
+  float pressure; 
+  float constant; // Varies depending on the desired unit of pressure
+  float exponent; 
+  float gas_correction = 1.0; // For measurements below 1 mbar, for air
+  
+  if (unit.equals("mbar")){
+    constant = 5.5;
+  } else if (unit.equals("mubar")){
+    constant = 2.5;
+  } else if (unit.equals("Torr")){
+    constant = 5.625;
+  } else if (unit.equals("mTorr")){
+    constant = 2.625;
+  } else if (unit.equals("Pa")){
+    constant = 3.5;
+  } else if (unit.equals("kPa")){
+    constant = 6.5;
+  } else {
+    // No constant was found
+    return 0; 
+  }
+
+  exponent = volt - constant;
+  pressure = pow(10, exponent)*gas_correction;
+  
+  return pressure;
 }
