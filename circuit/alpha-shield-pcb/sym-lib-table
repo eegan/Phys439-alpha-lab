@@ -1,3 +1,5 @@
 (sym_lib_table
   (lib (name alpha-shield)(type Legacy)(uri ${KIPRJMOD}/alpha-shield.lib)(options "")(descr ""))
+  (lib (name iv-mux)(type Legacy)(uri "C:/Users/Aunt Pancake/OneDrive - McGill University/Brunner/ivcurve/mux-design/iv-mux/iv-mux.lib")(options "")(descr ""))
+  (lib (name iv-mux-rescue)(type Legacy)(uri "C:/Users/Aunt Pancake/OneDrive - McGill University/Brunner/ivcurve/mux-design/iv-mux/iv-mux-rescue.lib")(options "")(descr ""))
 )
