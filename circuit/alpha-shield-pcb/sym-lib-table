@@ -1,0 +1,3 @@
+(sym_lib_table
+  (lib (name alpha-shield)(type Legacy)(uri ${KIPRJMOD}/alpha-shield.lib)(options "")(descr ""))
+)
