@@ -358,7 +358,7 @@ void ReadAnalogVoltage1(SCPI_C commands, SCPI_P parameters, Stream& interface)
     sum = sum/n;
     
     // convert ADC reading to voltage
-    float voltage = sum * (vcc / 4095.0) * 4; 
+    float voltage = sum * (vcc / 4095.0) * 4.003;   // account for the voltage divider 13.33/3.33
     interface.println(voltage);
 }
 
@@ -378,7 +378,7 @@ void ReadAnalogVoltage2(SCPI_C commands, SCPI_P parameters, Stream& interface)
     sum = sum/n;
     
     // convert ADC reading to voltage
-    float voltage = sum * (vcc / 4095.0) * 4; 
+    float voltage = sum * (vcc / 4095.0) * 4.003;   // account for the voltage divider 13.33/3.33
     interface.println(voltage);
 }
 
@@ -399,7 +399,7 @@ void ReadAnalogPressure1(SCPI_C commands, SCPI_P parameters, Stream& interface)
     
     // Convert ADC reading to voltage
     // Get the voltage in V
-    float voltage = sum * (vcc / 4095.0) * 4; 
+    float voltage = sum * (vcc / 4095.0) * 4.003;   // account for the voltage divider 13.33/3.33
     String unit = "Pa";
     float pressure = pressureConvert1(unit, voltage);
     interface.println(pressure);
@@ -422,7 +422,7 @@ void ReadAnalogPressure2(SCPI_C commands, SCPI_P parameters, Stream& interface)
     
     // Convert ADC reading to voltage
     // Get the voltage in V
-    float voltage = sum * (vcc / 4095.0) * 4; 
+    float voltage = sum * (vcc / 4095.0) * 4.003;   // account for the voltage divider 13.33/3.33
     float pressure = pressureConvert2(voltage);
     interface.println(pressure);
 }
