@@ -87,7 +87,6 @@ void loop()
 void setupSCPI()
 {
   // Example:  my_instrument.SetCommandTreeBase(F("SOURceS"))
-  // No longer requires suffix for relay, bias, valve, read or pressure
 
   // ---------- IDENTIFY ----------
   my_instrument.RegisterCommand(F("*IDN?"), &Identify);
@@ -97,10 +96,11 @@ void setupSCPI()
   my_instrument.RegisterCommand(F("RELAY?"), &GetRelay);
 
   // ---------- READ AND SET BIAS ----------
-  my_instrument.RegisterCommand(F("BIAS:ON"), &biasOn);     // turning bias on
-  my_instrument.RegisterCommand(F("BIAS:OFF"), &biasOff);   // turning bias off
-  my_instrument.RegisterCommand(F("BIAS"), &SetBias);       // set bias in V
-  my_instrument.RegisterCommand(F("BIAS?"), &GetBias);      // reads bias in V
+  my_instrument.RegisterCommand(F("BIAS:ON"), &biasOn);          // turning bias on
+  my_instrument.RegisterCommand(F("BIAS:OFF"), &biasOff);        // turning bias off
+  my_instrument.RegisterCommand(F("BIAS:ONOFF"), &biasOnOff);    // checking if bias is on (1) or off (0)
+  my_instrument.RegisterCommand(F("BIAS"), &SetBias);            // set bias in V
+  my_instrument.RegisterCommand(F("BIAS?"), &GetBias);           // reads bias in V
 
   // ---------- READ AND SET PROPORTIONAL VALVE ----------
   my_instrument.RegisterCommand(F("VALVE"), &SetValve); 
@@ -198,6 +198,18 @@ void biasOff(SCPI_C commands, SCPI_P parameters, Stream& interface)
   biasState = false;
   digitalWrite(biasControl, !biasState);
 }
+
+void biasOnOff(SCPI_C commands, SCPI_P parameters, Stream& interface) 
+{
+  int state;
+  if (biasState == true){
+     state = 1;
+  } else if (biasState == false){
+    state = 0;
+  }
+  interface.println(biasState);
+}
+
 
 void SetValve(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
