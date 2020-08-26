@@ -241,24 +241,24 @@ void SetAnalogValve(SCPI_C commands, SCPI_P parameters, Stream& interface, const
 
 void SetRaw1(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
-  SetPWM(commands, parameters, interface, biasPins, bias_settings, 1);
+  SetPWM(commands, parameters, interface, biasPins, 1);
 }
 
 void SetRaw2(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
-  SetPWM(commands, parameters, interface, valvePins, valve_settings, 2);
+  SetPWM(commands, parameters, interface, valvePins, 2);
 }
 
 // Setting a PWM voltage, spanning 0 to 3.3V
-void SetPWM(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], int settings[], int chan)
+void SetPWM(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], int chan)
 {
   int setting;
   int channel = chan;
   if (channel >= 1 && channel <= 2) {
     if (parameters.Size() > 0) {
       setting = constrain(String(parameters[0]).toInt(), 0, 3.3);
-      digitalWrite(relayPins[channel-1], !setting);   
-      settings[channel-1] = setting;      }
+      digitalWrite(pins[channel-1], !setting);   
+    }
   }
 }
 
