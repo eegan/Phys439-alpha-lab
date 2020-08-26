@@ -107,12 +107,14 @@ void setupSCPI()
   my_instrument.RegisterCommand(F("VALVE?"), &GetValve);         // in % opened
 
   // ---------- READ COUNTS ----------
-  my_instrument.RegisterCommand(F("COUNT1?"), &ReadAnalog0);    // in counts
-  my_instrument.RegisterCommand(F("COUNT2?"), &ReadAnalog1);    // in counts
-  my_instrument.RegisterCommand(F("COUNT2?"), &ReadAnalog2);    // in counts
+  my_instrument.RegisterCommand(F("COUNT#?"), &ReadAnalog);    // in counts
   
   // ---------- READ VOLTAGE ----------
-  my_instrument.RegisterCommand(F("VOLTAGE#?"), &readA);        // in V  
+  my_instrument.RegisterCommand(F("VOLTAGE#?"), &ReadA);        // in V, unscaled  
+
+  // ---------- PWMn ----------
+  my_instrument.RegisterCommand(F("PWM1"), &SetRaw1);           // in V from 0 to vcc
+  my_instrument.RegisterCommand(F("PWM2"), &SetRaw2);           // in V from 0 to vcc
  
   // ---------- READ PRESSURE ----------
   my_instrument.RegisterCommand(F("PRESSURE1?"), &ReadAnalogPressure1);   // in Pa (can be chosen)
@@ -147,7 +149,6 @@ void ConfigureHardware()
 
   // apparently no configuration is needed to use the analog pins as inputs?
 }
-
 
 // SCPI commands
 void Identify(SCPI_C commands, SCPI_P parameters, Stream& interface) {
@@ -238,6 +239,29 @@ void SetAnalogValve(SCPI_C commands, SCPI_P parameters, Stream& interface, const
   }
 }
 
+void SetRaw1(SCPI_C commands, SCPI_P parameters, Stream& interface) 
+{
+  SetPWM(commands, parameters, interface, biasPins, bias_settings, 1);
+}
+
+void SetRaw2(SCPI_C commands, SCPI_P parameters, Stream& interface) 
+{
+  SetPWM(commands, parameters, interface, valvePins, valve_settings, 2);
+}
+
+// Setting a PWM voltage, spanning 0 to 3.3V
+void SetPWM(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], int settings[], int chan)
+{
+  int setting;
+  int channel = chan;
+  if (channel >= 1 && channel <= 2) {
+    if (parameters.Size() > 0) {
+      setting = constrain(String(parameters[0]).toInt(), 0, 3.3);
+      digitalWrite(relayPins[channel-1], !setting);   
+      settings[channel-1] = setting;      }
+  }
+}
+
 void SetRelay(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
   SetDigitalRelay(commands, parameters, interface, relayPins, relay_settings, 1);   // only relay on channel 1 is connected
@@ -313,50 +337,11 @@ void GetRelay(SCPI_C commands, SCPI_P parameters, Stream& interface) {
   }  
 }
 
-// Reads the counts measured at A0
-void ReadAnalog0(SCPI_C commands, SCPI_P parameters, Stream& interface)
+// Reads the counts measured at A0, A1, and A2
+void ReadAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface)
 {
-    int pin = analogPins[0];
-    analogRead(pin);    // throw away first reading
-    delay(50);          // settling time
-    
-    // Take average of 8 readings from pin
-    // Analog pins already set to 12 bit resolution
-    float sum = 0; 
-    int n = 8; 
-    int i;
-    for (i = 0; i < n; i++) sum += analogRead(pin);
-    sum = sum/n;
-    
-    // convert ADC reading to voltage
-    float voltage = sum; 
-    interface.println(voltage);
-}
-
-// Reads the counts measured at A1
-void ReadAnalog1(SCPI_C commands, SCPI_P parameters, Stream& interface)
-{
-    int pin = analogPins[1];
-    analogRead(pin);    // throw away first reading
-    delay(50);          // settling time
-    
-    // Take average of 8 readings from pin
-    // Analog pins already set to 12 bit resolution
-    float sum = 0; 
-    int n = 8; 
-    int i;
-    for (i = 0; i < n; i++) sum += analogRead(pin);
-    sum = sum/n;
-    
-    // convert ADC reading to voltage
-    float voltage = sum; 
-    interface.println(voltage);
-}
-
-// Reads the counts measured at A2
-void ReadAnalog2(SCPI_C commands, SCPI_P parameters, Stream& interface)
-{
-    int pin = analogPins[2];
+    int channel = getSuffix(commands);
+    int pin = analogPins[channel-1];
     analogRead(pin);    // throw away first reading
     delay(50);          // settling time
     
@@ -374,7 +359,7 @@ void ReadAnalog2(SCPI_C commands, SCPI_P parameters, Stream& interface)
 }
 
 // Returns the voltage measured at A0, A1 or A2 depending on the suffix of the input command
-void readA(SCPI_C commands, SCPI_P parameters, Stream& interface)
+void ReadA(SCPI_C commands, SCPI_P parameters, Stream& interface)
 {
     int channel = getSuffix(commands);
     int pin = analogPins[channel-1];
@@ -492,7 +477,7 @@ float pressureConvert2(float volt)
   float pressure; 
   float psig_to_atm;    // conversion factor for psig to atm (1 psig = 0.068046 atm)
   
-  pressure = 44.7*volt/10/14.696; // returns pressure in atm
+  pressure = 44.7*volt/10/14.696 - 1.0; // returns pressure in atm 
   
   return pressure;
 }
