@@ -269,7 +269,7 @@ void SetPWM(SCPI_C commands, SCPI_P parameters, Stream& interface)
 
 void GetPWM(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
-  int channel = 1;
+  int channel = getSuffix(commands);
   if (channel >= 1 && channel <= 2) {
     interface.println(pwm_settings[channel-1]);
   }
