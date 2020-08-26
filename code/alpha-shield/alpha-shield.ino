@@ -92,27 +92,27 @@ void setupSCPI()
   my_instrument.RegisterCommand(F("*IDN?"), &Identify);
 
   // ---------- READ AND SET RELAY ----------
-  my_instrument.RegisterCommand(F("RELAY"), &SetRelay);     // remains RELAY 1 for on, RELAY 0 for off, just no suffix on relay
+  my_instrument.RegisterCommand(F("RELAY"), &SetRelay);           // remains RELAY 1 for on, RELAY 0 for off, just no suffix on relay
   my_instrument.RegisterCommand(F("RELAY?"), &GetRelay);
 
   // ---------- READ AND SET BIAS ----------
   my_instrument.RegisterCommand(F("BIAS:ON"), &biasOn);          // turning bias on
   my_instrument.RegisterCommand(F("BIAS:OFF"), &biasOff);        // turning bias off
-  my_instrument.RegisterCommand(F("BIAS:ONOFF"), &biasOnOff);    // checking if bias is on (1) or off (0)
+  my_instrument.RegisterCommand(F("BIAS:ONOFF?"), &biasOnOff);   // checking if bias is on (1) or off (0)
   my_instrument.RegisterCommand(F("BIAS"), &SetBias);            // set bias in V
   my_instrument.RegisterCommand(F("BIAS?"), &GetBias);           // reads bias in V
 
   // ---------- READ AND SET PROPORTIONAL VALVE ----------
   my_instrument.RegisterCommand(F("VALVE"), &SetValve); 
-  my_instrument.RegisterCommand(F("VALVE?"), &GetValve);    // in % opened
+  my_instrument.RegisterCommand(F("VALVE?"), &GetValve);         // in % opened
 
   // ---------- READ COUNTS ----------
-  my_instrument.RegisterCommand(F("COUNT1?"), &ReadAnalog1);    // in counts
+  my_instrument.RegisterCommand(F("COUNT1?"), &ReadAnalog0);    // in counts
+  my_instrument.RegisterCommand(F("COUNT2?"), &ReadAnalog1);    // in counts
   my_instrument.RegisterCommand(F("COUNT2?"), &ReadAnalog2);    // in counts
-
+  
   // ---------- READ VOLTAGE ----------
-  my_instrument.RegisterCommand(F("VOLTAGE1?"), &ReadAnalogVoltage1);    // in V
-  my_instrument.RegisterCommand(F("VOLTAGE2?"), &ReadAnalogVoltage2);    // in V
+  my_instrument.RegisterCommand(F("VOLTAGE#?"), &readA);        // in V  
  
   // ---------- READ PRESSURE ----------
   my_instrument.RegisterCommand(F("PRESSURE1?"), &ReadAnalogPressure1);   // in Pa (can be chosen)
@@ -209,7 +209,6 @@ void biasOnOff(SCPI_C commands, SCPI_P parameters, Stream& interface)
   }
   interface.println(biasState);
 }
-
 
 void SetValve(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
@@ -314,6 +313,26 @@ void GetRelay(SCPI_C commands, SCPI_P parameters, Stream& interface) {
   }  
 }
 
+// Reads the counts measured at A0
+void ReadAnalog0(SCPI_C commands, SCPI_P parameters, Stream& interface)
+{
+    int pin = analogPins[0];
+    analogRead(pin);    // throw away first reading
+    delay(50);          // settling time
+    
+    // Take average of 8 readings from pin
+    // Analog pins already set to 12 bit resolution
+    float sum = 0; 
+    int n = 8; 
+    int i;
+    for (i = 0; i < n; i++) sum += analogRead(pin);
+    sum = sum/n;
+    
+    // convert ADC reading to voltage
+    float voltage = sum; 
+    interface.println(voltage);
+}
+
 // Reads the counts measured at A1
 void ReadAnalog1(SCPI_C commands, SCPI_P parameters, Stream& interface)
 {
@@ -354,10 +373,11 @@ void ReadAnalog2(SCPI_C commands, SCPI_P parameters, Stream& interface)
     interface.println(voltage);
 }
 
-// Returns the voltage measured at A1
-void ReadAnalogVoltage1(SCPI_C commands, SCPI_P parameters, Stream& interface)
+// Returns the voltage measured at A0, A1 or A2 depending on the suffix of the input command
+void readA(SCPI_C commands, SCPI_P parameters, Stream& interface)
 {
-    int pin = analogPins[1];
+    int channel = getSuffix(commands);
+    int pin = analogPins[channel-1];
     analogRead(pin);    // throw away first reading
     delay(50);          // settling time
     
@@ -370,27 +390,7 @@ void ReadAnalogVoltage1(SCPI_C commands, SCPI_P parameters, Stream& interface)
     sum = sum/n;
     
     // convert ADC reading to voltage
-    float voltage = sum * (vcc / 4095.0) * 4.003;   // account for the voltage divider 13.33/3.33
-    interface.println(voltage);
-}
-
-// Returns the voltage measured at A2
-void ReadAnalogVoltage2(SCPI_C commands, SCPI_P parameters, Stream& interface)
-{
-    int pin = analogPins[2];
-    analogRead(pin);    // throw away first reading
-    delay(50);          // settling time
-    
-    // Take average of 8 readings from pin
-    // Analog pins already set to 12 bit resolution
-    float sum = 0; 
-    int n=8; 
-    int i;
-    for (i=0; i<n; i++) sum += analogRead(pin);
-    sum = sum/n;
-    
-    // convert ADC reading to voltage
-    float voltage = sum * (vcc / 4095.0) * 4.003;   // account for the voltage divider 13.33/3.33
+    float voltage = sum * (vcc / 4095.0);   // not considering voltage divider 13.33/3.33
     interface.println(voltage);
 }
 
