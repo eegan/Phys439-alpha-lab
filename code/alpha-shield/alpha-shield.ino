@@ -58,6 +58,7 @@ float bias_settings[] = {0.0, 0.0};
 float valve_settings[] = {0.0, 0.0};
 int relay_settings[] = {0, 0};
 bool biasState = false;
+float pwm_settings[] = {0.0, 0.0};
 
 // Where to send debug output
 // Note, this doesn't work for SCPI parser code, needs a bit of work to pass in the reference
@@ -117,6 +118,7 @@ void setupSCPI()
 //  my_instrument.RegisterCommand(F("PWM1"), &SetRaw1);           // in V from 0 to vcc
 //  my_instrument.RegisterCommand(F("PWM2"), &SetRaw2);           // in V from 0 to vcc
   my_instrument.RegisterCommand(F("PWM#"), &SetPWM);           // in V from 0 to vcc
+  my_instrument.RegisterCommand(F("PWM#?"), &GetPWM);           // in V from 0 to vcc
    
   // ---------- READ PRESSURE ----------
   my_instrument.RegisterCommand(F("PRESSURE1?"), &ReadAnalogPressure1);   // in Pa (can be chosen)
@@ -259,8 +261,17 @@ void SetPWM(SCPI_C commands, SCPI_P parameters, Stream& interface)
   if (channel >= 1 && channel <= 2) {
     if (parameters.Size() > 0) {
       setting = constrain(String(parameters[0]).toInt(), 0, vcc);
+      pwm_settings[channel-1] = setting;
       analogWrite(pwmPins[channel-1], setting * analogwrite_maxcount / vcc);   
     }
+  }
+}
+
+void GetPWM(SCPI_C commands, SCPI_P parameters, Stream& interface) 
+{
+  int channel = 1;
+  if (channel >= 1 && channel <= 2) {
+    interface.println(pwm_settings[channel-1]);
   }
 }
 
