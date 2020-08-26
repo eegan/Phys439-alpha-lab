@@ -51,6 +51,7 @@ const int valvePins[] = {9, 10};
 const int relayPins[] = {20, 21};     // RELAY1, RELAY2 are currently on the second (physical) channel, because of convenience of connectors
 const int biasControl = 15;
 const int analogPins[] = {A0, A1, A2};
+const int pwmPins[] = {5, 9};         // used for raw PWM write
 
 // state variables (settings)
 float bias_settings[] = {0.0, 0.0};
@@ -113,9 +114,10 @@ void setupSCPI()
   my_instrument.RegisterCommand(F("VOLTAGE#?"), &ReadA);        // in V, unscaled  
 
   // ---------- PWMn ----------
-  my_instrument.RegisterCommand(F("PWM1"), &SetRaw1);           // in V from 0 to vcc
-  my_instrument.RegisterCommand(F("PWM2"), &SetRaw2);           // in V from 0 to vcc
- 
+//  my_instrument.RegisterCommand(F("PWM1"), &SetRaw1);           // in V from 0 to vcc
+//  my_instrument.RegisterCommand(F("PWM2"), &SetRaw2);           // in V from 0 to vcc
+  my_instrument.RegisterCommand(F("PWM#"), &SetPWM);           // in V from 0 to vcc
+   
   // ---------- READ PRESSURE ----------
   my_instrument.RegisterCommand(F("PRESSURE1?"), &ReadAnalogPressure1);   // in Pa (can be chosen)
   my_instrument.RegisterCommand(F("PRESSURE2?"), &ReadAnalogPressure2);   // in atm
@@ -202,12 +204,12 @@ void biasOff(SCPI_C commands, SCPI_P parameters, Stream& interface)
 
 void biasOnOff(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
-  int state;
-  if (biasState == true){
-     state = 1;
-  } else if (biasState == false){
-    state = 0;
-  }
+//  int state;
+//  if (biasState == true){
+//     state = 1;
+//  } else if (biasState == false){
+//    state = 0;
+//  }
   interface.println(biasState);
 }
 
@@ -239,26 +241,26 @@ void SetAnalogValve(SCPI_C commands, SCPI_P parameters, Stream& interface, const
   }
 }
 
-void SetRaw1(SCPI_C commands, SCPI_P parameters, Stream& interface) 
-{
-  SetPWM(commands, parameters, interface, biasPins, bias_settings, 1);
-}
-
-void SetRaw2(SCPI_C commands, SCPI_P parameters, Stream& interface) 
-{
-  SetPWM(commands, parameters, interface, valvePins, valve_settings, 2);
-}
+//void SetRaw1(SCPI_C commands, SCPI_P parameters, Stream& interface) 
+//{
+//  SetPWM(commands, parameters, interface, biasPins, bias_settings, 1);
+//}
+//
+//void SetRaw2(SCPI_C commands, SCPI_P parameters, Stream& interface) 
+//{
+//  SetPWM(commands, parameters, interface, valvePins, valve_settings, 2);
+//}
 
 // Setting a PWM voltage, spanning 0 to 3.3V
-void SetPWM(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], int settings[], int chan)
+void SetPWM(SCPI_C commands, SCPI_P parameters, Stream& interface)
 {
-  int setting;
-  int channel = chan;
+  float setting;
+  int channel = getSuffix(commands);
   if (channel >= 1 && channel <= 2) {
     if (parameters.Size() > 0) {
-      setting = constrain(String(parameters[0]).toInt(), 0, 3.3);
-      digitalWrite(relayPins[channel-1], !setting);   
-      settings[channel-1] = setting;      }
+      setting = constrain(String(parameters[0]).toInt(), 0, vcc);
+      analogWrite(pwmPins[channel-1], setting * analogwrite_maxcount / vcc);   
+    }
   }
 }
 
@@ -475,7 +477,7 @@ float pressureConvert1(String unit, float volt)
 float pressureConvert2(float volt)
 { 
   float pressure; 
-  float psig_to_atm;    // conversion factor for psig to atm (1 psig = 0.068046 atm)
+//  float psig_to_atm;    // conversion factor for psig to atm (1 psig = 0.068046 atm)
   
   pressure = 44.7*volt/10/14.696 - 1.0; // returns pressure in atm 
   
