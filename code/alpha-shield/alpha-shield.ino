@@ -260,7 +260,7 @@ void SetPWM(SCPI_C commands, SCPI_P parameters, Stream& interface)
   int channel = getSuffix(commands);
   if (channel >= 1 && channel <= 2) {
     if (parameters.Size() > 0) {
-      setting = constrain(String(parameters[0]).toInt(), 0, vcc);
+      setting = constrain(String(parameters[0]).toFloat(), 0, vcc);
       pwm_settings[channel-1] = setting;
       analogWrite(pwmPins[channel-1], setting * analogwrite_maxcount / vcc);   
     }
