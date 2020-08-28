@@ -121,8 +121,9 @@ void setupSCPI()
   my_instrument.RegisterCommand(F("PWM#?"), &GetPWM);           // in V from 0 to vcc
    
   // ---------- READ PRESSURE ----------
-  my_instrument.RegisterCommand(F("PRESSURE1?"), &ReadAnalogPressure1);   // in Pa (can be chosen)
-  my_instrument.RegisterCommand(F("PRESSURE2?"), &ReadAnalogPressure2);   // in atm
+  my_instrument.RegisterCommand(F("PRESSURE#?"), &ReadAnalogPressure);   // 1 in Pa (can be chosen), 2 in atm
+  //my_instrument.RegisterCommand(F("PRESSURE1?"), &ReadAnalogPressure1);   // in Pa (can be chosen)
+  //my_instrument.RegisterCommand(F("PRESSURE2?"), &ReadAnalogPressure2);   // in atm
 
   // ---------- DEBUG ----------
   my_instrument.RegisterCommand(F("*DEBUG?"), &Debug);
@@ -206,13 +207,7 @@ void biasOff(SCPI_C commands, SCPI_P parameters, Stream& interface)
 
 void biasOnOff(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
-//  int state;
-//  if (biasState == true){
-//     state = 1;
-//  } else if (biasState == false){
-//    state = 0;
-//  }
-  interface.println(biasState);
+  interface.println(biasState);   // prints 1 for on, 0 for off
 }
 
 void SetValve(SCPI_C commands, SCPI_P parameters, Stream& interface) 
@@ -242,16 +237,6 @@ void SetAnalogValve(SCPI_C commands, SCPI_P parameters, Stream& interface, const
     }
   }
 }
-
-//void SetRaw1(SCPI_C commands, SCPI_P parameters, Stream& interface) 
-//{
-//  SetPWM(commands, parameters, interface, biasPins, bias_settings, 1);
-//}
-//
-//void SetRaw2(SCPI_C commands, SCPI_P parameters, Stream& interface) 
-//{
-//  SetPWM(commands, parameters, interface, valvePins, valve_settings, 2);
-//}
 
 // Setting a PWM voltage, spanning 0 to 3.3V
 void SetPWM(SCPI_C commands, SCPI_P parameters, Stream& interface)
@@ -390,6 +375,16 @@ void ReadA(SCPI_C commands, SCPI_P parameters, Stream& interface)
     // convert ADC reading to voltage
     float voltage = sum * (vcc / 4095.0);   // not considering voltage divider 13.33/3.33
     interface.println(voltage);
+}
+
+void ReadAnalogPressure(SCPI_C commands, SCPI_P parameters, Stream& interface) 
+{   
+  int sensor = getSuffix(commands);  // decide which sensor to use depending on given command suffix value
+  if (sensor == 1){
+    ReadAnalogPressure1(commands, parameters, interface);
+  } else if (sensor == 2){
+    ReadAnalogPressure2(commands, parameters, interface);
+  }
 }
 
 // Performs a voltage to pressure conversion for the low pressure sensor (pfeiffer)
