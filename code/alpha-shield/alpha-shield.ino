@@ -317,14 +317,14 @@ void GetBias(SCPI_C commands, SCPI_P parameters, Stream& interface)
   //Dbg.println("In GetBias");
   int channel = 1;
   if (channel >= 1 && channel <= 2) {
-    interface.println(bias_settings[channel-1]);
+    interface.println(bias_settings[channel-1], 5);
   }
 }
 
 void GetValve(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
   //Dbg.println("In GetValve"); //EE
-  interface.println(valve_settings[0]);
+  interface.println(valve_settings[0], 5);
 }
 
 void GetRelay(SCPI_C commands, SCPI_P parameters, Stream& interface) {
@@ -343,17 +343,17 @@ void ReadAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface)
     analogRead(pin);    // throw away first reading
     delay(50);          // settling time
     
-    // Take average of 8 readings from pin
+    // Take average of readings from pin
     // Analog pins already set to 12 bit resolution
     float sum = 0; 
-    int n = 8; 
+    int n = 1000; 
     int i;
     for (i = 0; i < n; i++) sum += analogRead(pin);
     sum = sum/n;
     
     // convert ADC reading to voltage
     float voltage = sum; 
-    interface.println(voltage);
+    interface.println(voltage, 5);
 }
 
 // Returns the voltage measured at A0, A1 or A2 depending on the suffix of the input command
@@ -364,17 +364,17 @@ void ReadA(SCPI_C commands, SCPI_P parameters, Stream& interface)
     analogRead(pin);    // throw away first reading
     delay(50);          // settling time
     
-    // Take average of 8 readings from pin
+    // Take average of readings from pin
     // Analog pins already set to 12 bit resolution
     float sum = 0; 
-    int n=8; 
+    int n = 1000; 
     int i;
     for (i=0; i<n; i++) sum += analogRead(pin);
     sum = sum/n;
     
     // convert ADC reading to voltage
     float voltage = sum * (vcc / 4095.0);   // not considering voltage divider 13.33/3.33
-    interface.println(voltage);
+    interface.println(voltage, 5);
 }
 
 void ReadAnalogPressure(SCPI_C commands, SCPI_P parameters, Stream& interface) 
@@ -394,10 +394,10 @@ void ReadAnalogPressure1(SCPI_C commands, SCPI_P parameters, Stream& interface)
     analogRead(pin);    // throw away first reading
     delay(50);          // settling time
     
-    // Take average of 8 readings from pin
+    // Take average of readings from pin
     // Analog pins already set to 12 bit resolution
     float sum = 0; 
-    int n=8; 
+    int n = 1000; 
     int i;
     for (i=0; i<n; i++) sum += analogRead(pin);
     sum = sum/n;
@@ -407,7 +407,7 @@ void ReadAnalogPressure1(SCPI_C commands, SCPI_P parameters, Stream& interface)
     float voltage = sum * (vcc / 4095.0) * 4.003;   // account for the voltage divider 13.33/3.33
     String unit = "Pa";
     float pressure = pressureConvert1(unit, voltage);
-    interface.println(pressure);
+    interface.println(pressure, 5);
 }
 
 // Performs a voltage to pressure conversion for the high pressure sensor
@@ -417,10 +417,10 @@ void ReadAnalogPressure2(SCPI_C commands, SCPI_P parameters, Stream& interface)
     analogRead(pin);    // throw away first reading
     delay(50);          // settling time
     
-    // Take average of 8 readings from pin
+    // Take average of readings from pin
     // Analog pins already set to 12 bit resolution
     float sum = 0; 
-    int n=8; 
+    int n = 1000; 
     int i;
     for (i=0; i<n; i++) sum += analogRead(pin);
     sum = sum/n;
@@ -429,7 +429,7 @@ void ReadAnalogPressure2(SCPI_C commands, SCPI_P parameters, Stream& interface)
     // Get the voltage in V
     float voltage = sum * (vcc / 4095.0) * 4.003;   // account for the voltage divider 13.33/3.33
     float pressure = pressureConvert2(voltage);
-    interface.println(pressure);
+    interface.println(pressure, 5);
 }
 
 // Can get the channel number from a command
