@@ -2,6 +2,7 @@
 #include "Vrekrer_scpi_parser.h"
 #include <math.h>
 
+#define NELS(X) ((sizeof X) / (sizeof X[0]))
 /*
  * TODO:
  * *RST, any other general SCPI commands?
@@ -50,7 +51,9 @@ const int biasPins[] = {5, 6};
 const int valvePins[] = {9, 10};
 const int relayPins[] = {20, 21};     // RELAY1, RELAY2 are currently on the second (physical) channel, because of convenience of connectors
 const int biasControl = 15;
-const int analogPins[] = {A0, A1, A2};
+const int analogPins[] = {A0, A1, A2, A3, A4, A5, A6, A7};  // VOLTAGE1-8
+const int vrefVCC = A7;
+const int vrefGND = A4;
 const int pwmPins[] = {5, 9};         // used for raw PWM write
 
 // state variables (settings)
@@ -58,6 +61,7 @@ float bias_settings[] = {0.0, 0.0};
 float valve_settings[] = {0.0, 0.0};
 int relay_settings[] = {0, 0};
 bool biasState = false;
+bool vrefState = false;
 float pwm_settings[] = {0.0, 0.0};
 
 // Where to send debug output
@@ -103,6 +107,11 @@ void setupSCPI()
   my_instrument.RegisterCommand(F("BIAS:ONOFF?"), &biasOnOff);   // checking if bias is on (1) or off (0)
   my_instrument.RegisterCommand(F("BIAS"), &SetBias);            // set bias in V
   my_instrument.RegisterCommand(F("BIAS?"), &GetBias);           // reads bias in V
+
+  // ---------- VOLTAGE REFERENCE ----------
+  my_instrument.RegisterCommand(F("VREF:ON"), &vrefOn);          // turning bias on
+  my_instrument.RegisterCommand(F("VREF:OFF"), &vrefOff);        // turning bias off
+  my_instrument.RegisterCommand(F("VREF:ONOFF?"), &vrefOnOff);   // checking if bias is on (1) or off (0)
 
   // ---------- READ AND SET PROPORTIONAL VALVE ----------
   my_instrument.RegisterCommand(F("VALVE"), &SetValve); 
@@ -157,7 +166,7 @@ void ConfigureHardware()
 
 // SCPI commands
 void Identify(SCPI_C commands, SCPI_P parameters, Stream& interface) {
-  interface.println(F("McGill,PHYS 439 Alpha Experiment Apparatus,#00,v0.1"));
+  interface.println(F("McGill,PHYS 439 Alpha Experiment Apparatus,#00,v1.0"));
 }
 
 void Debug(SCPI_C commands, SCPI_P parameters, Stream& interface) 
@@ -208,6 +217,29 @@ void biasOff(SCPI_C commands, SCPI_P parameters, Stream& interface)
 void biasOnOff(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
   interface.println(biasState);   // prints 1 for on, 0 for off
+}
+
+void vrefOn(SCPI_C commands, SCPI_P parameters, Stream& interface) 
+{
+  vrefState = true;
+  pinMode(vrefVCC, OUTPUT);
+  pinMode(vrefGND, OUTPUT);
+  digitalWrite(vrefVCC, 1);
+  digitalWrite(vrefGND, 0);
+}
+
+void vrefOff(SCPI_C commands, SCPI_P parameters, Stream& interface) 
+{
+  vrefState = false;
+  pinMode(vrefVCC, OUTPUT);
+  pinMode(vrefGND, OUTPUT);
+  digitalWrite(vrefVCC, 0);
+  digitalWrite(vrefGND, 0);
+}
+
+void vrefOnOff(SCPI_C commands, SCPI_P parameters, Stream& interface) 
+{
+  interface.println(vrefState);   // prints 1 for on, 0 for off
 }
 
 void SetValve(SCPI_C commands, SCPI_P parameters, Stream& interface) 
@@ -339,6 +371,8 @@ void GetRelay(SCPI_C commands, SCPI_P parameters, Stream& interface) {
 void ReadAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface)
 {
     int channel = getSuffix(commands);
+    if (channel > NELS(analogPins)) return;
+    
     int pin = analogPins[channel-1];
     analogRead(pin);    // throw away first reading
     delay(50);          // settling time
