@@ -7,7 +7,6 @@
  * TODO:
  * *RST, any other general SCPI commands?
  * calibration trim (in flash), trim setting commands - either factor + offset, or 2 point calibration
- * bias voltage readback, plus two 0-10V channels
  * include soft limits (flash parameters)
  * figure out continuous polling
  * global off? it all comes back when it's turned on?
@@ -18,9 +17,34 @@
  * Debug crash / disconnect
  */
 
+ /*
+  * Modifications for Brunner Lab
+  * 
+  * Expand bias and monitor to 12 channels
+  * Comment out valve stuff
+  * For now, just skip every other channel for HV option - fix this later
+  * For now, hard-code maximum voltage - fix this later
+  * Set AREF to external (after first making it work on internal 3.3V)
+  * Turn off if analog readback is out of spec (tricky since it takes so long). (Could compute step function responses, and track readback levels accordingly!)
+  */
+
+  /*
+   * Spec for readback tracking
+   * goal is to implement an OCP or short circuit detector
+   * poll as fast as convenient
+   * timestamp on each reading
+   * launch only when all is off
+   * only ever refer to last reading
+   * compute expected new value based on previous reading and previous setting
+   * do all of this before updating with a new value
+   * probably synchronize the loop with PWM updates
+   * shut off instantly if more than a certain amount of error; this or we have to keep history or running average (versus just looking at last reading)
+   * it will always come back from zero if reset, so the same situation applies on reactivating
+   */
+
 SCPI_Parser my_instrument;
 
-const int n_channels = 2;
+const int n_channels = 12;
 
 const int analogwrite_res_bits = 12;
 const int analogwrite_maxcount = (1 << analogwrite_res_bits) - 1;
@@ -30,39 +54,24 @@ const int analogread_maxcount = (1 << analogread_res_bits) - 1;
 
 const float vcc = 3.3;                  // Arduino supply (PWM or ADC full scale)
 
-const float valve_maxsetting = 100.0;   // maximum range (percent)
-const float valve_maxvoltage = 20.0;    // corresponding control voltage
-const float valve_gain = 6.783;         // amplifier gain (nominal, by component values)
-
-// (pwm count) = (setting+offset)*factor
-const float valve_factor = analogwrite_maxcount / vcc * valve_maxvoltage / valve_maxsetting / valve_gain;
-const float valve_offset = 1.2;         // Vbe drop on emitter follower, plus whatever else
-
 const float bias_maxsetting = 200.0;   // maximum range, lower limit may be set
 const float bias_maxvoltage = 2.5;     // corresponding control voltage
-const float bias_gain = 0.69299;       // amplifier gain (nominal, by component values)
+const float bias_gain = 1.0;           // amplifier gain (nominal, by component values)
 
 // (pwm count) = (setting+offset)*factor
 const float bias_factor = analogwrite_maxcount / vcc * bias_maxvoltage / bias_maxsetting / bias_gain;
 const float bias_offset = 0.0;
 
 // Hardware configuration: {first channel, second channel}
-const int biasPins[] = {5, 6};
-const int valvePins[] = {9, 10};
-const int relayPins[] = {20, 21};     // RELAY1, RELAY2 are currently on the second (physical) channel, because of convenience of connectors
-const int biasControl = 15;
-const int analogPins[] = {A0, A1, A2, A3, A4, A5, A6, A7};  // VOLTAGE1-8
+const int biasPins[] = {13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2};              // PWM1..12
+const int biasControl = 22;                                                   // GLOBAL_OFF
+const int analogPins[] = {A0, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11};  // MON1..12
 const int vrefVCC = A7;
 const int vrefGND = A4;
-const int pwmPins[] = {5, 9};         // used for raw PWM write
 
 // state variables (settings)
 float bias_settings[] = {0.0, 0.0};
-float valve_settings[] = {0.0, 0.0};
-int relay_settings[] = {0, 0};
 bool biasState = false;
-bool vrefState = false;
-float pwm_settings[] = {0.0, 0.0};
 
 // Where to send debug output
 // Note, this doesn't work for SCPI parser code, needs a bit of work to pass in the reference
@@ -97,42 +106,12 @@ void setupSCPI()
   // ---------- IDENTIFY ----------
   my_instrument.RegisterCommand(F("*IDN?"), &Identify);
 
-  // ---------- READ AND SET RELAY ----------
-  my_instrument.RegisterCommand(F("RELAY"), &SetRelay);           // remains RELAY 1 for on, RELAY 0 for off, just no suffix on relay
-  my_instrument.RegisterCommand(F("RELAY?"), &GetRelay);
-
   // ---------- READ AND SET BIAS ----------
   my_instrument.RegisterCommand(F("BIAS:ON"), &biasOn);          // turning bias on
   my_instrument.RegisterCommand(F("BIAS:OFF"), &biasOff);        // turning bias off
   my_instrument.RegisterCommand(F("BIAS:ONOFF?"), &biasOnOff);   // checking if bias is on (1) or off (0)
-  my_instrument.RegisterCommand(F("BIAS"), &SetBias);            // set bias in V
-  my_instrument.RegisterCommand(F("BIAS?"), &GetBias);           // reads bias in V
-
-  // ---------- VOLTAGE REFERENCE ----------
-  my_instrument.RegisterCommand(F("VREF:ON"), &vrefOn);          // turning bias on
-  my_instrument.RegisterCommand(F("VREF:OFF"), &vrefOff);        // turning bias off
-  my_instrument.RegisterCommand(F("VREF:ONOFF?"), &vrefOnOff);   // checking if bias is on (1) or off (0)
-
-  // ---------- READ AND SET PROPORTIONAL VALVE ----------
-  my_instrument.RegisterCommand(F("VALVE"), &SetValve); 
-  my_instrument.RegisterCommand(F("VALVE?"), &GetValve);         // in % opened
-
-  // ---------- READ COUNTS ----------
-  my_instrument.RegisterCommand(F("COUNT#?"), &ReadAnalog);    // in counts
-  
-  // ---------- READ VOLTAGE ----------
-  my_instrument.RegisterCommand(F("VOLTAGE#?"), &ReadA);        // in V, unscaled  
-
-  // ---------- PWMn ----------
-//  my_instrument.RegisterCommand(F("PWM1"), &SetRaw1);           // in V from 0 to vcc
-//  my_instrument.RegisterCommand(F("PWM2"), &SetRaw2);           // in V from 0 to vcc
-  my_instrument.RegisterCommand(F("PWM#"), &SetPWM);           // in V from 0 to vcc
-  my_instrument.RegisterCommand(F("PWM#?"), &GetPWM);           // in V from 0 to vcc
-   
-  // ---------- READ PRESSURE ----------
-  my_instrument.RegisterCommand(F("PRESSURE#?"), &ReadAnalogPressure);   // 1 in Pa (can be chosen), 2 in atm
-  //my_instrument.RegisterCommand(F("PRESSURE1?"), &ReadAnalogPressure1);   // in Pa (can be chosen)
-  //my_instrument.RegisterCommand(F("PRESSURE2?"), &ReadAnalogPressure2);   // in atm
+  my_instrument.RegisterCommand(F("BIAS#"), &SetBias);            // set bias in V
+  my_instrument.RegisterCommand(F("BIAS#?"), &GetBias);           // reads bias in V
 
   // ---------- DEBUG ----------
   my_instrument.RegisterCommand(F("*DEBUG?"), &Debug);
@@ -143,14 +122,6 @@ void ConfigureHardware()
 {
   analogWriteResolution(analogwrite_res_bits);
   for (int i=0; i<n_channels; i++) {
-    // relays
-    pinMode(relayPins[i], OUTPUT);
-    digitalWrite(relayPins[i], 1);            // active low
-  
-    // valves
-    pinMode(valvePins[i], OUTPUT);
-    analogWrite(valvePins[i], 0);
-    
     // bias voltage
     pinMode(biasPins[i], OUTPUT);
     analogWrite(biasPins[i], 0);
@@ -160,8 +131,6 @@ void ConfigureHardware()
   digitalWrite(biasControl, !biasState);      // active low
 
   analogReadResolution(analogread_res_bits);
-
-  // apparently no configuration is needed to use the analog pins as inputs?
 }
 
 // SCPI commands
@@ -183,7 +152,7 @@ void SetBias(SCPI_C commands, SCPI_P parameters, Stream& interface)
 void SetAnalogBias(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], float settings[], float maxsetting, float factor, float offset, int chan)
 {
   float setting;
-  int channel = chan;
+  int channel = getSuffix(commands);
   if (channel >= 1 && channel <= 2) {
     if (parameters.Size() > 0) {
       // TODO round by adding 0.5?
@@ -191,7 +160,7 @@ void SetAnalogBias(SCPI_C commands, SCPI_P parameters, Stream& interface, const 
       int count = constrain((setting+offset)*factor, 0, analogwrite_maxcount);
       analogWrite(pins[channel-1], count);
       settings[channel-1] = setting;
-      #if 0
+      #if 1
       Port.print("Pin: "); Port.print(pins[channel-1]); 
       Port.print(", setting: "); Port.print(setting);
       Port.print(", factor: "); Port.print(factor);
@@ -219,96 +188,6 @@ void biasOnOff(SCPI_C commands, SCPI_P parameters, Stream& interface)
   interface.println(biasState);   // prints 1 for on, 0 for off
 }
 
-void vrefOn(SCPI_C commands, SCPI_P parameters, Stream& interface) 
-{
-  vrefState = true;
-  pinMode(vrefVCC, OUTPUT);
-  pinMode(vrefGND, OUTPUT);
-  digitalWrite(vrefVCC, 1);
-  digitalWrite(vrefGND, 0);
-}
-
-void vrefOff(SCPI_C commands, SCPI_P parameters, Stream& interface) 
-{
-  vrefState = false;
-  pinMode(vrefVCC, OUTPUT);
-  pinMode(vrefGND, OUTPUT);
-  digitalWrite(vrefVCC, 0);
-  digitalWrite(vrefGND, 0);
-}
-
-void vrefOnOff(SCPI_C commands, SCPI_P parameters, Stream& interface) 
-{
-  interface.println(vrefState);   // prints 1 for on, 0 for off
-}
-
-void SetValve(SCPI_C commands, SCPI_P parameters, Stream& interface) 
-{
-  SetAnalogValve(commands, parameters, interface, valvePins, valve_settings, valve_maxsetting, valve_factor, valve_offset, 1);
-}
-
-// Specifying the valve channel; only channel 1 is connected
-void SetAnalogValve(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], float settings[], float maxsetting, float factor, float offset, int chan)
-{
-  float setting;
-  int channel = chan;   // got rid of getSuffix()
-  if (channel >= 1 && channel <= 2) {
-    if (parameters.Size() > 0) {
-      // TODO round by adding 0.5?
-      setting = constrain(String(parameters[0]).toFloat(), 0.0, maxsetting);
-      int count = constrain((setting+offset)*factor, 0, analogwrite_maxcount);
-      analogWrite(pins[channel-1], count);
-      settings[channel-1] = setting;
-      #if 0
-      Port.print("Pin: "); Port.print(pins[channel-1]); 
-      Port.print(", setting: "); Port.print(setting);
-      Port.print(", factor: "); Port.print(factor);
-      Port.print(", count: "); Port.print(count); 
-      Port.println("\n");
-      #endif
-    }
-  }
-}
-
-// Setting a PWM voltage, spanning 0 to 3.3V
-void SetPWM(SCPI_C commands, SCPI_P parameters, Stream& interface)
-{
-  float setting;
-  int channel = getSuffix(commands);
-  if (channel >= 1 && channel <= 2) {
-    if (parameters.Size() > 0) {
-      setting = constrain(String(parameters[0]).toFloat(), 0, vcc);
-      pwm_settings[channel-1] = setting;
-      analogWrite(pwmPins[channel-1], setting * analogwrite_maxcount / vcc);   
-    }
-  }
-}
-
-void GetPWM(SCPI_C commands, SCPI_P parameters, Stream& interface) 
-{
-  int channel = getSuffix(commands);
-  if (channel >= 1 && channel <= 2) {
-    interface.println(pwm_settings[channel-1]);
-  }
-}
-
-void SetRelay(SCPI_C commands, SCPI_P parameters, Stream& interface) 
-{
-  SetDigitalRelay(commands, parameters, interface, relayPins, relay_settings, 1);   // only relay on channel 1 is connected
-}
-
-void SetDigitalRelay(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], int settings[], int chan)
-{
-  int setting;
-  int channel = chan;
-  if (channel >= 1 && channel <= 2) {
-    if (parameters.Size() > 0) {
-      setting = constrain(String(parameters[0]).toInt(), 0, 1);
-      digitalWrite(relayPins[channel-1], !setting);    // active low
-      settings[channel-1] = setting;      }
-  }
-}
-
 void SetAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], float settings[], float maxsetting, float factor, float offset)
 {
   float setting;
@@ -331,19 +210,6 @@ void SetAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface, const int 
   }
 }
 
-// TODO: support ON / OFF ?
-void SetDigital(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], int settings[])
-{
-  int setting;
-  int channel = getSuffix(commands);
-  if (channel >= 1 && channel <= 2) {
-    if (parameters.Size() > 0) {
-      setting = constrain(String(parameters[0]).toInt(), 0, 1);
-      digitalWrite(relayPins[channel-1], !setting);    // active low
-      settings[channel-1] = setting;      }
-  }
-}
-
 void GetBias(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
   //Dbg.println("In GetBias");
@@ -351,20 +217,6 @@ void GetBias(SCPI_C commands, SCPI_P parameters, Stream& interface)
   if (channel >= 1 && channel <= 2) {
     interface.println(bias_settings[channel-1], 5);
   }
-}
-
-void GetValve(SCPI_C commands, SCPI_P parameters, Stream& interface) 
-{
-  //Dbg.println("In GetValve"); //EE
-  interface.println(valve_settings[0], 5);
-}
-
-void GetRelay(SCPI_C commands, SCPI_P parameters, Stream& interface) {
-  //Dbg.println("In GetRelay"); //EE
-  int channel = 1; // since channel 1 is the only operational one; channel 2 exists, but not connected
-  if (channel >= 1 && channel <= 2) {
-    interface.println(relay_settings[channel-1]);
-  }  
 }
 
 // Reads the counts measured at A0, A1, and A2
@@ -390,84 +242,7 @@ void ReadAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface)
     interface.println(voltage, 5);
 }
 
-// Returns the voltage measured at A0, A1 or A2 depending on the suffix of the input command
-void ReadA(SCPI_C commands, SCPI_P parameters, Stream& interface)
-{
-    int channel = getSuffix(commands);
-    int pin = analogPins[channel-1];
-    analogRead(pin);    // throw away first reading
-    delay(50);          // settling time
-    
-    // Take average of readings from pin
-    // Analog pins already set to 12 bit resolution
-    float sum = 0; 
-    int n = 1000; 
-    int i;
-    for (i=0; i<n; i++) sum += analogRead(pin);
-    sum = sum/n;
-    
-    // convert ADC reading to voltage
-    float voltage = sum * (vcc / 4095.0);   // not considering voltage divider 13.33/3.33
-    interface.println(voltage, 5);
-}
-
-void ReadAnalogPressure(SCPI_C commands, SCPI_P parameters, Stream& interface) 
-{   
-  int sensor = getSuffix(commands);  // decide which sensor to use depending on given command suffix value
-  if (sensor == 1){
-    ReadAnalogPressure1(commands, parameters, interface);
-  } else if (sensor == 2){
-    ReadAnalogPressure2(commands, parameters, interface);
-  }
-}
-
-// Performs a voltage to pressure conversion for the low pressure sensor (pfeiffer)
-void ReadAnalogPressure1(SCPI_C commands, SCPI_P parameters, Stream& interface)
-{
-    int pin = analogPins[1];
-    analogRead(pin);    // throw away first reading
-    delay(50);          // settling time
-    
-    // Take average of readings from pin
-    // Analog pins already set to 12 bit resolution
-    float sum = 0; 
-    int n = 1000; 
-    int i;
-    for (i=0; i<n; i++) sum += analogRead(pin);
-    sum = sum/n;
-    
-    // Convert ADC reading to voltage
-    // Get the voltage in V
-    float voltage = sum * (vcc / 4095.0) * 4.003;   // account for the voltage divider 13.33/3.33
-    String unit = "Pa";
-    float pressure = pressureConvert1(unit, voltage);
-    interface.println(pressure, 5);
-}
-
-// Performs a voltage to pressure conversion for the high pressure sensor
-void ReadAnalogPressure2(SCPI_C commands, SCPI_P parameters, Stream& interface)
-{
-    int pin = analogPins[2];
-    analogRead(pin);    // throw away first reading
-    delay(50);          // settling time
-    
-    // Take average of readings from pin
-    // Analog pins already set to 12 bit resolution
-    float sum = 0; 
-    int n = 1000; 
-    int i;
-    for (i=0; i<n; i++) sum += analogRead(pin);
-    sum = sum/n;
-    
-    // Convert ADC reading to voltage
-    // Get the voltage in V
-    float voltage = sum * (vcc / 4095.0) * 4.003;   // account for the voltage divider 13.33/3.33
-    float pressure = pressureConvert2(voltage);
-    interface.println(pressure, 5);
-}
-
-// Can get the channel number from a command
-// Not used anymore, but still here
+// Get the channel number from a command
 int getSuffix(SCPI_C commands)
 {
   // For simplicity no bad parameter check is done.
@@ -476,50 +251,4 @@ int getSuffix(SCPI_C commands)
   sscanf(header.c_str(),"%*[a-zA-Z]%u", &suffix);
   //Dbg.print("Suffix: "); Dbg.println(suffix);
   return suffix;
-}
-
-// Converting the measured voltage reading from ADC to a pressure value
-// Takes ADC output in Volts and the unit of pressure as input; can choose from mbar, mubar, Torr, mTorr, Pa, kPa
-// Used for the pirani pressure gauge, connected to pin A1 
-float pressureConvert1(String unit, float volt)
-{ 
-  float pressure; 
-  float constant; // Varies depending on the desired unit of pressure
-  float exponent; 
-  float gas_correction = 1.0; // For measurements below 1 mbar, for air
-  
-  if (unit.equals("mbar")){
-    constant = 5.5;
-  } else if (unit.equals("mubar")){
-    constant = 2.5;
-  } else if (unit.equals("Torr")){
-    constant = 5.625;
-  } else if (unit.equals("mTorr")){
-    constant = 2.625;
-  } else if (unit.equals("Pa")){
-    constant = 3.5;
-  } else if (unit.equals("kPa")){
-    constant = 6.5;
-  } else {
-    // No constant was found
-    return 0; 
-  }
-
-  exponent = volt - constant;
-  pressure = pow(10, exponent)*gas_correction;
-  
-  return pressure;
-}
-
-// Converting the measured voltage reading from ADC to a pressure value
-// Takes ADC output in Volts
-// Used for the ProSense pressure transducer
-float pressureConvert2(float volt)
-{ 
-  float pressure; 
-//  float psig_to_atm;    // conversion factor for psig to atm (1 psig = 0.068046 atm)
-  
-  pressure = 44.7*volt/10/14.696 - 1.0; // returns pressure in atm 
-  
-  return pressure;
 }
