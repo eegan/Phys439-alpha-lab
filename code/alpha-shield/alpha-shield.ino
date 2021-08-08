@@ -153,7 +153,7 @@ void SetAnalogBias(SCPI_C commands, SCPI_P parameters, Stream& interface, const 
 {
   float setting;
   int channel = getSuffix(commands);
-  if (channel >= 1 && channel <= 2) {
+  if (channel >= 1 && channel <= n_channels) {
     if (parameters.Size() > 0) {
       // TODO round by adding 0.5?
       setting = constrain(String(parameters[0]).toFloat(), 0.0, maxsetting);
