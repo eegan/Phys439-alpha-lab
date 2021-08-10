@@ -20,12 +20,18 @@
  /*
   * Modifications for Brunner Lab
   * 
-  * Expand bias and monitor to 12 channels
-  * Comment out valve stuff
-  * For now, just skip every other channel for HV option - fix this later
-  * For now, hard-code maximum voltage - fix this later
-  * Set AREF to external (after first making it work on internal 3.3V)
-  * Turn off if analog readback is out of spec (tricky since it takes so long). (Could compute step function responses, and track readback levels accordingly!)
+  * CONSIDERATIONS
+  *   May shorten time constant of smoothing filter (current 2.2s) to speed up settling time
+  *   
+  * DONE
+  *   Expand bias and monitor to 12 channels
+  *   Comment out valve stuff
+  *   Include hard-coded but per-channel maximum voltage - different versions will be compile-time options
+  *   
+  * TODO  
+  *   Add per-channel offset and gain calibration (if we do this, might as well include range per channel)
+  *   Add monitor voltage scanning for OCP (pretty rough limits given settling time, and 
+  *   Add status LED
   */
 
   /*
@@ -54,13 +60,20 @@ const int analogread_maxcount = (1 << analogread_res_bits) - 1;
 
 const float vcc = 3.3;                  // Arduino supply (PWM or ADC full scale)
 
-const float bias_maxsetting = 200.0;   // maximum range, lower limit may be set
+// modify if needed for channels with non-identical ranges
+const float maxrange = 400.0;
+const float bias_maxsetting[n_channels] = {
+                                             maxrange, maxrange, maxrange, maxrange
+                                           , maxrange, maxrange, maxrange, maxrange
+                                           , maxrange, maxrange, maxrange, maxrange
+                                          };   // maximum range, lower limit may be set
+
 const float bias_maxvoltage = 2.5;     // corresponding control voltage
 const float bias_gain = 1.0;           // amplifier gain (nominal, by component values)
 
 // (pwm count) = (setting+offset)*factor
-const float bias_factor = analogwrite_maxcount / vcc * bias_maxvoltage / bias_maxsetting / bias_gain;
-const float bias_offset = 0.0;
+float bias_factor[n_channels]; // = analogwrite_maxcount / vcc * bias_maxvoltage / bias_maxsetting / bias_gain;
+const float bias_offset = 1.0;
 
 // Hardware configuration: {first channel, second channel}
 const int biasPins[] = {13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2};              // PWM1..12
@@ -70,7 +83,7 @@ const int vrefVCC = A7;
 const int vrefGND = A4;
 
 // state variables (settings)
-float bias_settings[] = {0.0, 0.0};
+float bias_settings[n_channels] = {0.0};
 bool biasState = false;
 
 // Where to send debug output
@@ -92,11 +105,17 @@ void setup()
 //    Dbg.begin(9600);
   
   ConfigureHardware();
+
+  int i;
+  for (i=0; i<NELS(bias_factor); i++)
+    bias_factor[i] = analogwrite_maxcount / vcc * bias_maxvoltage / bias_maxsetting[i] / bias_gain;
+
 }
 
 void loop()
 {
   my_instrument.ProcessInput(Port, (char *)"\n");
+  //Port.println("hello");
 }
 
 void setupSCPI()
@@ -112,6 +131,8 @@ void setupSCPI()
   my_instrument.RegisterCommand(F("BIAS:ONOFF?"), &biasOnOff);   // checking if bias is on (1) or off (0)
   my_instrument.RegisterCommand(F("BIAS#"), &SetBias);            // set bias in V
   my_instrument.RegisterCommand(F("BIAS#?"), &GetBias);           // reads bias in V
+
+  my_instrument.RegisterCommand(F("MONitor#?"), &ReadAnalog);     // read back monitor voltage
 
   // ---------- DEBUG ----------
   my_instrument.RegisterCommand(F("*DEBUG?"), &Debug);
@@ -135,7 +156,7 @@ void ConfigureHardware()
 
 // SCPI commands
 void Identify(SCPI_C commands, SCPI_P parameters, Stream& interface) {
-  interface.println(F("McGill,PHYS 439 Alpha Experiment Apparatus,#00,v1.0"));
+  interface.println(F("McGill Brunner Lab multi-output voltage source v1.0"));
 }
 
 void Debug(SCPI_C commands, SCPI_P parameters, Stream& interface) 
@@ -149,21 +170,21 @@ void SetBias(SCPI_C commands, SCPI_P parameters, Stream& interface)
 }
 
 // Writing to the appropriate bias channel (1)
-void SetAnalogBias(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], float settings[], float maxsetting, float factor, float offset, int chan)
+void SetAnalogBias(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], float settings[], const float maxsetting[], const float factor[], const float offset, int chan)
 {
   float setting;
   int channel = getSuffix(commands);
   if (channel >= 1 && channel <= n_channels) {
     if (parameters.Size() > 0) {
       // TODO round by adding 0.5?
-      setting = constrain(String(parameters[0]).toFloat(), 0.0, maxsetting);
-      int count = constrain((setting+offset)*factor, 0, analogwrite_maxcount);
+      setting = constrain(String(parameters[0]).toFloat(), 0.0, maxsetting[channel-1]);
+      int count = constrain((setting+offset)*factor[channel-1], 0, analogwrite_maxcount);
       analogWrite(pins[channel-1], count);
       settings[channel-1] = setting;
-      #if 1
+      #if 0
       Port.print("Pin: "); Port.print(pins[channel-1]); 
       Port.print(", setting: "); Port.print(setting);
-      Port.print(", factor: "); Port.print(factor);
+      Port.print(", factor: "); Port.print(factor[channel-1]);
       Port.print(", count: "); Port.print(count); 
       Port.println("\n");
       #endif
@@ -188,27 +209,27 @@ void biasOnOff(SCPI_C commands, SCPI_P parameters, Stream& interface)
   interface.println(biasState);   // prints 1 for on, 0 for off
 }
 
-void SetAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], float settings[], float maxsetting, float factor, float offset)
-{
-  float setting;
-  int channel = getSuffix(commands);
-  if (channel >= 1 && channel <= 2) {
-    if (parameters.Size() > 0) {
-      // TODO round by adding 0.5?
-      setting = constrain(String(parameters[0]).toFloat(), 0.0, maxsetting);
-      int count = constrain((setting+offset)*factor, 0, analogwrite_maxcount);
-      analogWrite(pins[channel-1], count);
-      settings[channel-1] = setting;
-      #if 0
-      Port.print("Pin: "); Port.print(pins[channel-1]); 
-      Port.print(", setting: "); Port.print(setting);
-      Port.print(", factor: "); Port.print(factor);
-      Port.print(", count: "); Port.print(count); 
-      Port.println("\n");
-      #endif
-    }
-  }
-}
+//void SetAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface, const int pins[], float settings[], float maxsetting, float factor, float offset)
+//{
+//  float setting;
+//  int channel = getSuffix(commands);
+//  if (channel >= 1 && channel <= 2) {
+//    if (parameters.Size() > 0) {
+//      // TODO round by adding 0.5?
+//      setting = constrain(String(parameters[0]).toFloat(), 0.0, maxsetting);
+//      int count = constrain((setting+offset)*factor, 0, analogwrite_maxcount);
+//      analogWrite(pins[channel-1], count);
+//      settings[channel-1] = setting;
+//      #if 0
+//      Port.print("Pin: "); Port.print(pins[channel-1]); 
+//      Port.print(", setting: "); Port.print(setting);
+//      Port.print(", factor: "); Port.print(factor);
+//      Port.print(", count: "); Port.print(count); 
+//      Port.println("\n");
+//      #endif
+//    }
+//  }
+//}
 
 void GetBias(SCPI_C commands, SCPI_P parameters, Stream& interface) 
 {
@@ -228,7 +249,7 @@ void ReadAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface)
     int pin = analogPins[channel-1];
     analogRead(pin);    // throw away first reading
     delay(50);          // settling time
-    
+
     // Take average of readings from pin
     // Analog pins already set to 12 bit resolution
     float sum = 0; 
@@ -238,7 +259,8 @@ void ReadAnalog(SCPI_C commands, SCPI_P parameters, Stream& interface)
     sum = sum/n;
     
     // convert ADC reading to voltage
-    float voltage = sum; 
+
+    float voltage = sum / analogread_maxcount * 3.3 / 2.5 * bias_maxsetting[channel-1]; 
     interface.println(voltage, 5);
 }
 
