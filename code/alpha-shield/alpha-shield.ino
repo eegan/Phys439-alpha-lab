@@ -156,7 +156,7 @@ void ConfigureHardware()
 
 // SCPI commands
 void Identify(SCPI_C commands, SCPI_P parameters, Stream& interface) {
-  interface.println(F("McGill Brunner Lab multi-output voltage source v1.0"));
+  interface.println(F("McGill Brunner Lab multi-output voltage source v1.1"));
 }
 
 void Debug(SCPI_C commands, SCPI_P parameters, Stream& interface) 
@@ -235,7 +235,7 @@ void GetBias(SCPI_C commands, SCPI_P parameters, Stream& interface)
 {
   //Dbg.println("In GetBias");
   int channel = 1;
-  if (channel >= 1 && channel <= 2) {
+  if (channel >= 1 && channel <= n_channels) {
     interface.println(bias_settings[channel-1], 5);
   }
 }
